@@ -16,7 +16,7 @@ from homeassistant.components.bluetooth import (
 from bluetooth_sensor_state_data import BluetoothData
 from home_assistant_bluetooth import BluetoothServiceInfo
 
-from .const import DOMAIN, CONF_RESET, CONF_DELAY
+from .const import DOMAIN, CONF_RESET, CONF_DELAY, get_device_model
 import logging
 
 LOGGER = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class DeviceData(BluetoothData):
         #LOGGER.debug("Discovered bluetooth devices, DeviceData, : %s , %s", self._discovery.address, self._discovery.name)
 
     def supported(self):
-        return self._discovery.name.lower().startswith("leddmx-00")
+        return get_device_model(self._discovery.name) is not None
 
     def address(self):
         return self._discovery.address

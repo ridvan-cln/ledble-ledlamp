@@ -13,6 +13,7 @@ from bleak_retry_connector import (
 )
 from typing import Any, TypeVar, cast, Tuple
 from collections.abc import Callable
+from .const import get_device_model
 #import traceback
 import logging
 import colorsys
@@ -72,13 +73,12 @@ EFFECT_MAP = {
 EFFECT_LIST = sorted(EFFECT_MAP)
 EFFECT_ID_NAME = {v: k for k, v in EFFECT_MAP.items()}
 
-NAME_ARRAY = ["LEDBLE-01", "LEDDMX-00"]
 WRITE_CHARACTERISTIC_UUIDS = [
     "0000ffe1-0000-1000-8000-00805f9b34fb",
     "0000ffb0-0000-1000-8000-00805f9b34fb"
 ]
-TURN_ON_CMD  = [bytearray.fromhex("7e ff 04 01 ff ff ff ff ef")]
-TURN_OFF_CMD = [bytearray.fromhex("7e ff 04 00 ff ff ff ff ef")]
+TURN_ON_CMD = bytearray.fromhex("7e ff 04 01 ff ff ff ff ef")
+TURN_OFF_CMD = bytearray.fromhex("7e ff 04 00 ff ff ff ff ef")
 DEFAULT_ATTEMPTS = 3
 BLEAK_BACKOFF_TIME = 0.25
 RETRY_BACKOFF_EXCEPTIONS = (BleakDBusError)
@@ -185,13 +185,11 @@ class LEDBLELEDLamp:
         )
 
     def _detect_model(self):
-        x = 0
-        for name in NAME_ARRAY:
-            if self._device.name.lower().startswith(name.lower()):
-                self._turn_on_cmd = TURN_ON_CMD[x]
-                self._turn_off_cmd = TURN_OFF_CMD[x]
-                return x
-            x = x + 1
+        model = get_device_model(self._device.name)
+        if model is not None:
+            self._turn_on_cmd = TURN_ON_CMD
+            self._turn_off_cmd = TURN_OFF_CMD
+        return model
 
     async def _write(self, data: bytearray):
         """Send command to device and read response."""
