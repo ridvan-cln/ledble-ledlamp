@@ -72,8 +72,11 @@ EFFECT_MAP = {
 EFFECT_LIST = sorted(EFFECT_MAP)
 EFFECT_ID_NAME = {v: k for k, v in EFFECT_MAP.items()}
 
-NAME_ARRAY = ["LEDBLE-01"]
-WRITE_CHARACTERISTIC_UUIDS = ["0000ffe1-0000-1000-8000-00805f9b34fb"]
+NAME_ARRAY = ["LEDBLE-01", "LEDDMX-00"]
+WRITE_CHARACTERISTIC_UUIDS = [
+    "0000ffe1-0000-1000-8000-00805f9b34fb",
+    "0000ffb0-0000-1000-8000-00805f9b34fb"
+]
 TURN_ON_CMD  = [bytearray.fromhex("7e ff 04 01 ff ff ff ff ef")]
 TURN_OFF_CMD = [bytearray.fromhex("7e ff 04 00 ff ff ff ff ef")]
 DEFAULT_ATTEMPTS = 3
