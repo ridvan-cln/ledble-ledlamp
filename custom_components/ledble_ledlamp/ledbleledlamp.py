@@ -72,6 +72,7 @@ EFFECT_MAP = {
 
 EFFECT_LIST = sorted(EFFECT_MAP)
 EFFECT_ID_NAME = {v: k for k, v in EFFECT_MAP.items()}
+LEDDMX_EFFECT_LIST = [f"Pattern {index}" for index in range(1, 211)]
 
 WRITE_CHARACTERISTIC_UUIDS = [
     "0000ffe1-0000-1000-8000-00805f9b34fb",
@@ -150,7 +151,13 @@ def retry_bluetooth_connection_error(func: WrapFuncType) -> WrapFuncType:
 
 
 class LEDBLELEDLamp:
-    def __init__(self, address, hass) -> None:
+    def __init__(
+        self,
+        address,
+        hass,
+        model_name: str | None = None,
+        fallback_name: str | None = None,
+    ) -> None:
         self.loop = asyncio.get_running_loop()
         self._mac = address
         self._hass = hass
@@ -173,9 +180,14 @@ class LEDBLELEDLamp:
         self._effect_speed = 0x64
         self._color_mode = ColorMode.RGB
         self._write_uuid = None
-        self._turn_on_cmd = TURN_ON_CMD
-        self._turn_off_cmd = TURN_OFF_CMD
-        self._model = self._detect_model()
+        self._model = self._detect_model(model_name, fallback_name)
+        self._is_leddmx = self._model == "LEDDMX-00"
+        if self._is_leddmx:
+            self._turn_on_cmd = bytearray.fromhex("7b ff 04 03 ff ff ff ff bf")
+            self._turn_off_cmd = bytearray.fromhex("7b ff 04 02 ff ff ff ff bf")
+        else:
+            self._turn_on_cmd = TURN_ON_CMD
+            self._turn_off_cmd = TURN_OFF_CMD
         
         LOGGER.debug(
             "Model information for device %s : ModelNo %s. MAC: %s",
@@ -184,8 +196,14 @@ class LEDBLELEDLamp:
             self._mac,
         )
 
-    def _detect_model(self):
-        return get_device_model(self._device.name)
+    def _detect_model(
+        self, model_name: str | None = None, fallback_name: str | None = None
+    ):
+        return (
+            get_device_model(model_name)
+            or get_device_model(self._device.name)
+            or get_device_model(fallback_name)
+        )
 
     async def _write(self, data: bytearray):
         """Send command to device and read response."""
@@ -226,7 +244,7 @@ class LEDBLELEDLamp:
 
     @property
     def effect_list(self) -> list[str]:
-        return EFFECT_LIST
+        return LEDDMX_EFFECT_LIST if self._is_leddmx else EFFECT_LIST
 
     @property
     def effect(self):
@@ -244,13 +262,14 @@ class LEDBLELEDLamp:
                 self._brightness = 255
             else:
                 brightness = self._brightness
-        brightness_percent = int(brightness * 100 / 255)
-        # RGB packet
-        rgb_packet = bytearray.fromhex("7e ff 05 03")
-        rgb_packet.append(rgb[0])
-        rgb_packet.append(rgb[1])
-        rgb_packet.append(rgb[2])
-        rgb_packet.extend([0xff,0xef])
+        if self._is_leddmx:
+            rgb_packet = bytearray(
+                [0x7B, 0xFF, 0x07, rgb[1], rgb[2], rgb[0], 0x00, 0xFF, 0xBF]
+            )
+        else:
+            rgb_packet = bytearray.fromhex("7e ff 05 03")
+            rgb_packet.extend(rgb)
+            rgb_packet.extend([0xff, 0xef])
         await self._write(rgb_packet)
 
     async def set_brightness_local(self, value: int):
@@ -258,39 +277,45 @@ class LEDBLELEDLamp:
             value = 255
         self._brightness = value
         brightness_percent = int(value * 100 / 255)
-        brightness_packet = bytearray.fromhex("7e ff 01")
-        brightness_packet.append(brightness_percent)
-        brightness_packet.extend([0, 0xff, 0xff, 0xff, 0xff, 0xef])
+        if self._is_leddmx:
+            adjusted_percentage = (brightness_percent * 32) // 100
+            brightness_packet = bytearray(
+                [
+                    0x7B, 0xFF, 0x01, adjusted_percentage,
+                    brightness_percent, 0x00, 0xFF, 0xFF, 0xBF,
+                ]
+            )
+        else:
+            brightness_packet = bytearray.fromhex("7e ff 01")
+            brightness_packet.append(brightness_percent)
+            brightness_packet.extend([0, 0xff, 0xff, 0xff, 0xff, 0xef])
         await self._write(brightness_packet)
 
     @retry_bluetooth_connection_error
-    async def turn_on(self):
-        await self._write(self._turn_on_cmd)
-        self._is_on = True
-                
-    @retry_bluetooth_connection_error
-    async def turn_off(self):
-        await self._write(self._turn_off_cmd)
-        self._is_on = False
-
-    @retry_bluetooth_connection_error
     async def set_effect(self, effect: str):
-        if effect not in EFFECT_LIST:
+        if effect not in self.effect_list:
             LOGGER.error("Effect %s not supported", effect)
             return
         self._effect = effect
-        effect_packet = bytearray.fromhex("7e ff 03")
-        effect_id = EFFECT_MAP.get(effect)
+        if self._is_leddmx:
+            effect_id = int(effect.removeprefix("Pattern "))
+            effect_packet = bytearray(
+                [0x7B, 0xFF, 0x03, effect_id, 0xFF, 0xFF, 0xFF, 0xFF, 0xBF]
+            )
+        else:
+            effect_packet = bytearray.fromhex("7e ff 03")
+            effect_id = EFFECT_MAP[effect]
+            effect_packet.append(effect_id)
+            effect_packet.extend([0x03, 0xff, 0xff, 0xff, 0xef])
         LOGGER.debug('Effect ID: %s', effect_id)
         LOGGER.debug('Effect name: %s', effect)
-        effect_packet.append(effect_id)
-        effect_packet.extend([0x03, 0xff, 0xff, 0xff, 0xef])
         await self._write(effect_packet)
 
     @retry_bluetooth_connection_error
     async def turn_on(self):
         await self._write(self._turn_on_cmd)
-        await self._write(bytearray.fromhex("7e ff 02 41 00 ff ff ff ef"))
+        if not self._is_leddmx:
+            await self._write(bytearray.fromhex("7e ff 02 41 00 ff ff ff ef"))
         self._is_on = True
 
     @retry_bluetooth_connection_error

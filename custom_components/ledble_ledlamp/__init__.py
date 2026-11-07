@@ -18,7 +18,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     #delay = entry.options.get(CONF_DELAY, None) or entry.data.get(CONF_DELAY, None)
     #LOGGER.debug("Config Reset data: %s and config delay data: %s", reset, delay)
 
-    instance = LEDBLELEDLamp(entry.data[CONF_MAC], hass)
+    instance = LEDBLELEDLamp(
+        entry.data[CONF_MAC],
+        hass,
+        entry.options.get("device_model")
+        or entry.data.get("device_model"),
+        entry.data.get("name"),
+    )
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = instance
 
@@ -45,6 +51,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
-    instance = hass.data[DOMAIN][entry.entry_id]
-    if entry.title != instance.name:
-        await hass.config_entries.async_reload(entry.entry_id)
+    await hass.config_entries.async_reload(entry.entry_id)

@@ -18,7 +18,8 @@
             "manual": {
                 "data": {
                     "mac": "LEDBLE device:",
-                    "name": "Name"
+                    "name": "Name",
+                    "device_model": "Device model"
                 },
                 "title": "Enter bluetooth MAC address"
             }
@@ -37,7 +38,8 @@
             "user": {
                 "data": {
                     "reset": "Reset color when led turn on",
-                    "delay": "Disconnect delay (0 equal never disconnect)"
+                    "delay": "Disconnect delay (0 equal never disconnect)",
+                    "device_model": "Device model"
                 }
             }
         }

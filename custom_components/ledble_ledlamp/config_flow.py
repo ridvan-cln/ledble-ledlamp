@@ -55,6 +55,7 @@ class LEDBLELEDLampFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._device = None
         self._instance = None
         self.name = None
+        self._model = None
         self._discovery_info: BluetoothServiceInfoBleak | None = None
         self._discovered_device: DeviceData | None = None
         self._discovered_devices = []
@@ -92,12 +93,11 @@ class LEDBLELEDLampFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             LOGGER.debug(f"MAC address: {self.mac}")
             if "title_placeholders" in self.context.keys() :
                 self.name = self.context["title_placeholders"]["name"]
-            if 'source' in self.context.keys() and self.context['source'] == 'user':
-                LOGGER.debug(f"User context.  discovered devices: {self._discovered_devices}")
-                for each in self._discovered_devices:
-                  LOGGER.debug(f"Address: {each.address()}")
-                  if each.address() == self.mac:
+            self._model = None
+            for each in self._discovered_devices:
+                if each.address() == self.mac:
                     self.name = each.get_device_name()
+                    self._model = get_device_model(each._discovery.name)
             if self.name is None: self.name = "LEDDMX-00-x"
             await self.async_set_unique_id(self.mac, raise_on_progress=False)
             self._abort_if_unique_id_configured()
@@ -134,7 +134,14 @@ class LEDBLELEDLampFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             if "flicker" in user_input:
                 if user_input["flicker"]:
-                    return self.async_create_entry(title=self.name, data={CONF_MAC: self.mac, "name": self.name})
+                    return self.async_create_entry(
+                        title=self.name,
+                        data={
+                            CONF_MAC: self.mac,
+                            "name": self.name,
+                            "device_model": self._model,
+                        },
+                    )
                 return self.async_abort(reason="cannot_validate")
             
             if "retry" in user_input and not user_input["retry"]:
@@ -161,6 +168,7 @@ class LEDBLELEDLampFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:            
             self.mac = user_input[CONF_MAC]
             self.name = user_input["name"]
+            self._model = user_input.get("device_model")
             await self.async_set_unique_id(format_mac(self.mac))
             return await self.async_step_validate()
 
@@ -168,13 +176,14 @@ class LEDBLELEDLampFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="manual", data_schema=vol.Schema(
                 {
                     vol.Required(CONF_MAC): str,
-                    vol.Required("name"): str
+                    vol.Required("name"): str,
+                    vol.Required("device_model"): vol.In(("LEDBLE-01", "LEDDMX-00")),
                 }
             ), errors={})
 
     async def toggle_light(self):
         if not self._instance:
-            self._instance = LEDBLELEDLamp(self.mac, self.hass)
+            self._instance = LEDBLELEDLamp(self.mac, self.hass, self._model)
         try:
             await self._instance.update()
             await self._instance.turn_on()
@@ -205,14 +214,30 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Handle a flow initialized by the user."""
         errors = {}
         options = self.config_entry.options or {CONF_RESET: False,CONF_DELAY: 120}
+        model_default = (
+            options.get("device_model")
+            or get_device_model(self.config_entry.data.get("device_model"))
+            or get_device_model(self.config_entry.data.get("name"))
+            or "LEDBLE-01"
+        )
         if user_input is not None:
-            return self.async_create_entry(title="", data={CONF_RESET: user_input[CONF_RESET], CONF_DELAY: user_input[CONF_DELAY]})
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_RESET: user_input.get(CONF_RESET, options.get(CONF_RESET, False)),
+                    CONF_DELAY: user_input.get(CONF_DELAY, options.get(CONF_DELAY, 120)),
+                    "device_model": user_input["device_model"],
+                },
+            )
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_DELAY, default=options.get(CONF_DELAY)): int
+                    vol.Optional(CONF_DELAY, default=options.get(CONF_DELAY, 120)): int,
+                    vol.Required("device_model", default=model_default): vol.In(
+                        ("LEDBLE-01", "LEDDMX-00")
+                    ),
                 }
             ), errors=errors
         )
