@@ -173,8 +173,8 @@ class LEDBLELEDLamp:
         self._effect_speed = 0x64
         self._color_mode = ColorMode.RGB
         self._write_uuid = None
-        self._turn_on_cmd = None
-        self._turn_off_cmd = None
+        self._turn_on_cmd = TURN_ON_CMD
+        self._turn_off_cmd = TURN_OFF_CMD
         self._model = self._detect_model()
         
         LOGGER.debug(
@@ -185,11 +185,7 @@ class LEDBLELEDLamp:
         )
 
     def _detect_model(self):
-        model = get_device_model(self._device.name)
-        if model is not None:
-            self._turn_on_cmd = TURN_ON_CMD
-            self._turn_off_cmd = TURN_OFF_CMD
-        return model
+        return get_device_model(self._device.name)
 
     async def _write(self, data: bytearray):
         """Send command to device and read response."""

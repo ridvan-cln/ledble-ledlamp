@@ -184,7 +184,8 @@ class LEDBLELEDLampFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             await self._instance.turn_on()
             await asyncio.sleep(1)
             await self._instance.turn_off()
-        except (Exception) as error:
+        except Exception as error:
+            LOGGER.exception("Failed to validate LEDBLE device at %s", self.mac)
             return error
         finally:
             await self._instance.stop()
