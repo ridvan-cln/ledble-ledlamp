@@ -7,8 +7,11 @@ CONF_DELAY = "delay"
 SUPPORTED_DEVICE_NAMES = ("LEDBLE-01", "LEDDMX-00")
 
 
-def get_device_model(name: str) -> str | None:
+def get_device_model(name: str | None) -> str | None:
 	"""Return the supported model prefix for a Bluetooth local name."""
+	if name is None:
+		return None
+
 	normalized_name = name.lower()
 	return next(
 		(
